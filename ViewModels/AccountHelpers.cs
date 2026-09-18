@@ -194,4 +194,28 @@ public static class AccountHelpers
         }
         catch { /* 历史写入失败不影响签到 */ }
     }
+
+    // ==================== 签到调试日志（排查问题用） ====================
+
+    /// <summary>日志文件锁（独立于 HistoryIoLock，避免签到高峰争用）。</summary>
+    private static readonly object CheckinLogLock = new();
+
+    /// <summary>
+    /// 写入一条签到调试日志到 checkin_log_yyyyMM.txt。
+    /// 记录时间、账号、设备号、API 结果等关键信息，便于排查 9074 / token 失效等问题。
+    /// </summary>
+    public static void CheckinLog(string accountName, string message)
+    {
+        try
+        {
+            lock (CheckinLogLock)
+            {
+                Directory.CreateDirectory(HistoryDir);
+                var logFile = Path.Combine(HistoryDir, $"checkin_log_{DateTime.Now:yyyyMM}.txt");
+                var name = string.IsNullOrEmpty(accountName) ? "?" : accountName;
+                File.AppendAllText(logFile, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{name}] {message}{Environment.NewLine}");
+            }
+        }
+        catch { /* 日志写入失败不影响签到 */ }
+    }
 }
