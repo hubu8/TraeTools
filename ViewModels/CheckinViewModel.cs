@@ -120,8 +120,12 @@ public partial class CheckinViewModel : ViewModelBase
                   ?? cfg?.Accounts.FirstOrDefault();
         if (acc?.LastCheckinDate is DateTime lc) signed.Add(lc.Date);
         if (cfg?.LastCheckinDate is DateTime clc) signed.Add(clc.Date);
-        foreach (var (date, _) in ReadAllHistory())
-            if (date != DateTime.MinValue) signed.Add(date);
+        foreach (var (date, line) in ReadAllHistory())
+        {
+            if (date == DateTime.MinValue) continue;
+            if (TryParseRecord(line, out var rec) && rec.Type == "签到失败") continue;   // 失败记录不算已签
+            signed.Add(date);
+        }
         return signed;
     }
 
@@ -259,7 +263,7 @@ public partial class CheckinViewModel : ViewModelBase
 
 
     /// <summary>自动签到结束后，把本轮多账号结果批量推送到飞书（对齐 TraeCheckin.NotifyFeishuBatchAsync）。</summary>
-    private async Task NotifyFeishuBatchAsync(List<(string Name, bool Ok, double Gained)> results)
+    private async Task NotifyFeishuBatchAsync(List<(string Name, bool Ok, double Gained, string Reason)> results)
     {
         try
         {
@@ -269,7 +273,7 @@ public partial class CheckinViewModel : ViewModelBase
             sb.AppendLine("Trae 多账号签到结果");
             foreach (var r in results)
             {
-                sb.AppendLine((r.Ok ? "✅ " : "⚠️ ") + r.Name + (r.Ok ? $"  获得 {r.Gained:0} 积分" : "  失败"));
+                sb.AppendLine((r.Ok ? "✅ " : "⚠️ ") + r.Name + (r.Ok ? $"  获得 {r.Gained:0} 积分" : $"  失败：{r.Reason}"));
             }
             await TraeCheckin.FeishuNotifier.SendTextAsync(cfg.FeishuWebhook, sb.ToString());
         }
@@ -280,16 +284,19 @@ public partial class CheckinViewModel : ViewModelBase
     /// 对齐 TraeCheckin.DoCheckinAsync：遍历全部 Enabled 账号签到，单账号失败不阻断。
     /// 返回是否至少成功一个 + 各账号结果（供汇总文案/飞书推送）。
     /// </summary>
-    private async Task<(bool Any, List<(string Name, bool Ok, double Gained)> Results)> CheckinAllAccountsAsync()
+    private async Task<(bool Any, List<(string Name, bool Ok, double Gained, string Reason)> Results)> CheckinAllAccountsAsync()
     {
         var cfg = MainViewModel.AppConfig;
         var api = MainViewModel.CheckinApi;
-        var results = new List<(string Name, bool Ok, double Gained)>();
+        var results = new List<(string Name, bool Ok, double Gained, string Reason)>();
         bool any = false;
         if (cfg == null || api == null) return (false, results);
 
+        int idx = 0;
         foreach (var acc in cfg.Accounts.Where(a => a.Enabled))
         {
+            // 账号间随机间隔 3~6 秒：避免同 IP 下连续 claim 被风控按时间窗聚合判定为「参与用户太多(9074)」
+            if (idx++ > 0) await Task.Delay(Random.Shared.Next(3000, 6000));
             var display = string.IsNullOrEmpty(acc.Name)
                 ? (acc.Id.Length > 6 ? acc.Id[..6] : acc.Id)
                 : acc.Name!;
@@ -297,16 +304,17 @@ public partial class CheckinViewModel : ViewModelBase
             // 一律先补发设备号（风控要求；含已签提前，避免用空/旧设备号去查状态）
             AccountHelpers.EnsureDeviceId(acc);
 
-            // 未登录：计入失败汇总
+            // 未登录：计入失败汇总并给出原因，且写入失败历史
             if (string.IsNullOrEmpty(acc.Token))
             {
-                results.Add((display, false, 0));
+                TryAppendHistory(acc, 0, success: false, reason: "未登录");
+                results.Add((display, false, 0, "未登录"));
                 continue;
             }
             // 已签（本地记录）：计入成功、不计本日新增积分（历史已有当日记录）
             if (acc.LastCheckinDate.HasValue && acc.LastCheckinDate.Value.Date == DateTime.Today)
             {
-                results.Add((display, true, 0));
+                results.Add((display, true, 0, "今日已签"));
                 continue;
             }
             try
@@ -315,7 +323,8 @@ public partial class CheckinViewModel : ViewModelBase
                 bool valid = await AccountHelpers.EnsureValidTokenAsync(acc);
                 if (!valid)
                 {
-                    results.Add((display, false, 0));   // 登录态失效
+                    TryAppendHistory(acc, 0, success: false, reason: "会话失效，请重新登录");
+                    results.Add((display, false, 0, "会话失效，请重新登录"));   // 登录态失效
                     continue;
                 }
                 // 真实状态判定：已真签（本地漏记）→ 补记并计入成功；未签才执行 claim
@@ -326,32 +335,43 @@ public partial class CheckinViewModel : ViewModelBase
                     double already = TraeCheckin.CheckinEvaluator.ResolveGainedCredits(s, acc.IsMember);
                     try { cfg.Save(); } catch { /* 忽略 */ }
                     if (already > 0) TryAppendHistory(acc, already);   // 服务器已签而本地漏记 → 补写历史
-                    results.Add((display, true, already));
+                    results.Add((display, true, already, "今日已签"));
                     continue;
                 }
 
-                double g = await CheckinOneAccountAsync(acc);
+                var (g, reason) = await CheckinOneAccountAsync(acc);
                 if (g > 0) any = true;
-                results.Add((display, g > 0, g));
+                if (g <= 0) TryAppendHistory(acc, 0, success: false, reason);   // 失败也留痕，原因可见
+                results.Add((display, g > 0, g, reason));
             }
-            catch { results.Add((display, false, 0)); } // 单账号失败继续下一个
+            catch
+            {
+                TryAppendHistory(acc, 0, success: false, reason: "网络或接口异常");
+                results.Add((display, false, 0, "网络或接口异常")); // 单账号失败继续下一个
+            }
         }
         return (any, results);
     }
 
-    /// <summary>对指定账号执行一次签到；返回本次获得的积分（0 = 失败/未获得）。</summary>
-    private async Task<double> CheckinOneAccountAsync(TraeCheckin.TraeAccount acc)
+    /// <summary>对指定账号执行一次签到；返回 (本次获得的积分, 失败原因)。失败原因用于界面/推送明确提示。</summary>
+    private async Task<(double Gained, string Reason)> CheckinOneAccountAsync(TraeCheckin.TraeAccount acc)
     {
         var cfg = MainViewModel.AppConfig;
         var api = MainViewModel.CheckinApi;
-        if (cfg == null || api == null) return 0;
+        if (cfg == null || api == null) return (0, "服务未初始化");
         AccountHelpers.EnsureDeviceId(acc);
         // token 失效则先用 Session 静默换新，避免 claim 因鉴权失败
         bool valid = await AccountHelpers.EnsureValidTokenAsync(acc);
-        if (!valid || string.IsNullOrEmpty(acc.Token)) return 0;
+        if (!valid || string.IsNullOrEmpty(acc.Token)) return (0, "会话失效，请重新登录");
 
         var result = await api.ClaimAsync(acc.Token, acc.DeviceId);
-        if (result == null || result.code != 0) return 0;   // claim 明确失败
+        if (result == null || result.code != 0)
+        {
+            var reason = api.LastError;
+            if (string.IsNullOrEmpty(reason))
+                reason = "签到未成功（可能：今日已签 / 风控「参与用户太多」/ 会话失效）";
+            return (0, reason);   // claim 明确失败，原因透出
+        }
 
         // claim 响应不含本次所得积分（源注释明确），签到成功后再查 status 解析（对齐源 CheckinOneAsync）
         double gained = 0;
@@ -376,7 +396,7 @@ public partial class CheckinViewModel : ViewModelBase
         catch { /* 积分刷新失败不影响 */ }
         try { cfg.Save(); } catch { /* 忽略 */ }
         TryAppendHistory(acc, gained);
-        return gained;
+        return (gained, "");
     }
 
     /// <summary>历史读写锁（唯一真源在 AccountHelpers，这里仅转发）。</summary>
@@ -385,9 +405,9 @@ public partial class CheckinViewModel : ViewModelBase
     /// <summary>自动签到上次已触发日期（每日仅触发一次）。</summary>
     private static DateTime _lastAutoCheckDate = DateTime.MinValue;
 
-    /// <summary>把签到结果写入本地历史文件（统一走 AccountHelpers，格式 date | name | type | +gained）。</summary>
-    private void TryAppendHistory(TraeCheckin.TraeAccount acc, double gained)
-        => AccountHelpers.AppendHistory(acc, gained);
+    /// <summary>把签到结果写入本地历史文件（统一走 AccountHelpers，格式 date | name | type | 结果）。</summary>
+    private void TryAppendHistory(TraeCheckin.TraeAccount acc, double gained, bool success = true, string? reason = null)
+        => AccountHelpers.AppendHistory(acc, gained, success, reason);
 
     /// <summary>账号切换联动：按新激活账号刷新会员/奖励/日历/记录。</summary>
     public void Reload()
@@ -467,9 +487,13 @@ public partial class CheckinViewModel : ViewModelBase
             var (any, results) = await CheckinAllAccountsAsync();
             int ok = results.Count(r => r.Ok);
             double total = results.Sum(r => r.Gained);
-            StatusMessage = results.Count == 0
+            string summary = results.Count == 0
                 ? "今日所有账号均已签到"
                 : $"共 {results.Count} 个账号，成功 {ok} 个，获得 {total:0} 积分";
+            var fails = results.Where(r => !r.Ok).ToList();
+            if (fails.Count > 0)
+                summary += "；失败：" + string.Join("、", fails.Select(f => $"{f.Name}：{f.Reason}"));
+            StatusMessage = summary;
 
             ReloadCalendar();
             LoadHistory();

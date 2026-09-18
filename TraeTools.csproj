@@ -8,7 +8,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyTitle>TraeTools</AssemblyTitle>
     <Product>TraeTools</Product>
-    <Version>1.0.1</Version>
+    <Version>1.0.2.0</Version>
+    <!-- 显示/发布版本号（tag v1.0.2.1 用运行时会话等其他展示），AssemblyVersion 保持 1.0.2.0 以便应用内更新判定 v1.0.2.1 为更新版 -->
+    <InformationalVersion>1.0.2.1</InformationalVersion>
     <NoWarn>CA1416;MSB3277</NoWarn>
   </PropertyGroup>
   <!-- 仅 LoginHostForm/WebViewLoginHost 用显式 using 引用 WinForms，全局 using 会造成与 Avalonia 命名冲突 -->

@@ -118,21 +118,27 @@
                             <ListBox ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}"
                                      Background="Transparent" BorderThickness="0"
                                      ScrollViewer.VerticalScrollBarVisibility="Auto" MaxHeight="220">
-                                <!-- 选中态：隐藏 ListBoxItem 默认底色 + 卡片本体变蓝 -->
+                                <!-- 选中态：直接在 ListBoxItem 级高亮（不再依赖易失效的卡片反射绑定），保证任何主题下都可见 -->
                                 <ListBox.Styles>
-                                    <Style Selector="ListBoxItem:selected /template/ ContentPresenter" x:SetterTargetType="ContentPresenter">
-                                        <Setter Property="Background" Value="Transparent" />
+                                    <Style Selector="ListBoxItem /template/ ContentPresenter" x:SetterTargetType="ContentPresenter">
+                                        <Setter Property="CornerRadius" Value="10" />
                                     </Style>
-                                    <Style Selector="Border.acct-card.selected" x:SetterTargetType="Border">
-                                        <Setter Property="Background" Value="#1A3B82F6" />
+                                    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter" x:SetterTargetType="ContentPresenter">
+                                        <Setter Property="Background" Value="#123B82F6" />
+                                    </Style>
+                                    <Style Selector="ListBoxItem:selected /template/ ContentPresenter" x:SetterTargetType="ContentPresenter">
+                                        <Setter Property="Background" Value="#263B82F6" />
                                         <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                        <Setter Property="BorderThickness" Value="1" />
+                                    </Style>
+                                    <Style Selector="ListBoxItem:focus-visible /template/ ContentPresenter" x:SetterTargetType="ContentPresenter">
+                                        <Setter Property="Background" Value="#263B82F6" />
                                     </Style>
                                 </ListBox.Styles>
                                 <ListBox.ItemTemplate>
                                     <!-- 圆角卡片式账号行 -->
                                     <DataTemplate>
                                         <Border CornerRadius="10" Classes="acct-card"
-                                                Classes.selected="{ReflectionBinding $parent[ListBoxItem].IsSelected, Mode=OneWay}"
                                                 Background="#FFF8FAFC" BorderBrush="#FFE2E8F0" BorderThickness="1"
                                                 Padding="10,8" Margin="2,4" HorizontalAlignment="Stretch">
                                             <Grid ColumnDefinitions="32,*,Auto">

@@ -1,4 +1,4 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:TraeTools.ViewModels"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -132,7 +132,7 @@
                                                 <TextBlock Text="{Binding Date}" FontSize="12" FontWeight="SemiBold" />
                                                 <TextBlock Text="{Binding Account}" FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
                                             </StackPanel>
-                                            <TextBlock Grid.Column="2" Text="{Binding Result}" FontSize="13" FontWeight="Bold" Foreground="{Binding ResultBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="{Binding Result}" FontSize="13" FontWeight="Bold" Foreground="{Binding ResultBrush}" VerticalAlignment="Center" MaxWidth="220" TextTrimming="CharacterEllipsis" />
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
