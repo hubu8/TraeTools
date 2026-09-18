@@ -41,8 +41,7 @@ public class AppConfig
     /// <summary>关闭主窗口时是否最小化到系统托盘（托盘驻留）。</summary>
     public bool MinimizeToTray { get; set; } = true;
 
-    private static string ConfigDir =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TraeCheckin");
+    private static string ConfigDir => TraeTools.Services.DataPaths.Root;
 
     private static string ConfigPath => Path.Combine(ConfigDir, "config.json");
 

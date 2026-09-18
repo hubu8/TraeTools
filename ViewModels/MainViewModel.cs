@@ -77,9 +77,7 @@ public partial class MainViewModel : ViewModelBase
         {
             if (SwitchSettings != null)
             {
-                var vaultRoot = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "TraeSwitch", "vault");
+                var vaultRoot = TraeTools.Services.DataPaths.VaultDir;
                 Vault = new VaultService(SwitchSettings.Data.RootDir, vaultRoot);
             }
         }

@@ -266,11 +266,9 @@ public partial class SettingsViewModel : ViewModelBase
                 return;
             }
         }
-        catch { /* 回退 mock */ }
+        catch { /* 加载失败保持空列表 */ }
 
-        Accounts.Add(new AccountInfo { Name = "主号@150", Initial = "主", Color = "#3B82F6", Status = "当前 ✓", StatusType = "ok", CreatedAt = "2026-09-01 14:23", IsCurrent = true });
-        Accounts.Add(new AccountInfo { Name = "备用号@0", Initial = "备", Color = "#10B981", Status = "已建档", StatusType = "info", CreatedAt = "2026-09-05 10:12" });
-        Accounts.Add(new AccountInfo { Name = "测试号@0", Initial = "测", Color = "#F59E0B", Status = "需重登", StatusType = "warn", CreatedAt = "2026-08-28 18:50" });
+        // 无真实账号时不展示示例账号（示例无法被删除，会造成「账号不存在」误导）
     }
 
     [RelayCommand]

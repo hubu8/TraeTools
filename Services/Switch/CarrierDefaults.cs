@@ -2,8 +2,7 @@ namespace TraeSwitch.Services;
 
 public static class CarrierDefaults
 {
-    public static string SettingsDir =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TraeSwitch");
+    public static string SettingsDir => TraeTools.Services.DataPaths.SwitchDir;
 
     public static string DefaultUserDataDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TRAE SOLO CN");

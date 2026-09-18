@@ -152,7 +152,7 @@ public static class AccountHelpers
     private static readonly object ProfileCacheLock = new();
     private static readonly Dictionary<string, ProfileCacheEntry> ProfileCache = new(StringComparer.Ordinal);
 
-    // ==================== 数据存储目录 ====================
+    // ==================== 数据存储目录====================
 
     internal static readonly object HistoryIoLock = new();
 

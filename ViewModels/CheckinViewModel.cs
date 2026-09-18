@@ -207,11 +207,7 @@ public partial class CheckinViewModel : ViewModelBase
         catch { /* 数据库读取失败回退到文本文件 */ }
 
         var all = ReadAllHistory().Where(r => r.Date != DateTime.MinValue).ToList();
-        if (all.Count == 0)
-        {
-            AddMockRecords();
-            return;
-        }
+        if (all.Count == 0) return;
         foreach (var (_, line) in all.Take(50))
         {
             if (!TryParseRecord(line, out var rec)) continue;
@@ -261,11 +257,6 @@ public partial class CheckinViewModel : ViewModelBase
             ? m.Groups[4].Value
             : "+" + m.Groups[4].Value;
         return true;
-    }
-
-    private void AddMockRecords()
-    {
-        Records.Add(new CheckinRecord { Date = DateTime.Today.ToString("yyyy-MM-dd") + " 08:00", Account = "（示例）", Type = "示例数据", Result = "+150" });
     }
 
     /// <summary>

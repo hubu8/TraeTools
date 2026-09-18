@@ -90,9 +90,7 @@ public partial class SwitchViewModel : ViewModelBase
 
         if (vault != null)
         {
-            VaultPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "TraeSwitch", "vault");
+            VaultPath = TraeTools.Services.DataPaths.VaultDir;
         }
 
         if (settings == null)
