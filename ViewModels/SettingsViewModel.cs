@@ -71,7 +71,7 @@ public partial class SettingsViewModel : ViewModelBase
     public string OriginalRepoUrl => "https://github.com/star620/TraeTools";
     public string ForkRepoUrl => "https://github.com/star620/TraeTools";
     public string IssuesUrl => "https://github.com/star620/TraeTools/issues";
-    public string AppVersion => "v1.0.0";
+    public string AppVersion => TraeTools.Services.AppVersion.Display;
 
     public SettingsViewModel()
     {
