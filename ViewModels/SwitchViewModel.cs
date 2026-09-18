@@ -51,6 +51,28 @@ public partial class SwitchViewModel : ViewModelBase
         Steps.Add(new SwitchStep { Index = 5, Title = "判定结果", Description = "校验登录态", Status = "idle" });
 
         LoadAccounts();
+        EnsureFingerprint();   // 指纹为空时自动检测并回填，避免「未配置载体指纹」卡死建档/切换
+    }
+
+    /// <summary>
+    /// 载体指纹（Fingerprint）为空时，自动检测客户端登录态载体并写入 settings.json。
+    /// 原版需手动用 Probe 配置（Phase 0），合并版没有该入口 → 用户会在此卡死（issue #20）。
+    /// </summary>
+    private void EnsureFingerprint()
+    {
+        var settings = MainViewModel.SwitchSettings;
+        if (settings?.Data == null || settings.Data.Fingerprint.Count > 0) return;
+        var detected = TraeSwitch.Services.CarrierDefaults.DetectFingerprint();
+        if (detected.Count == 0)
+        {
+            AppendLog("未检测到客户端登录态载体（可能未安装 Trae 客户端或目录为空），请确认后再建档/切换");
+            return;
+        }
+        settings.Data.Fingerprint.AddRange(detected);
+        try { settings.Save(); } catch { /* 保存失败下次再写 */ }
+        AppendLog($"未配置载体指纹 → 已自动检测并写入 {detected.Count} 项：{string.Join("、", detected)}");
+        CarrierCount = settings.Data.Fingerprint.Count;
+        LoadAccounts();
     }
 
     private IClientController? BuildClient()
@@ -195,9 +217,10 @@ public partial class SwitchViewModel : ViewModelBase
             AppendLog("切换服务未初始化（TraeSwitch 配置缺失）");
             return;
         }
+        EnsureFingerprint();   // 切前兜底：仍为空则说明确实没有载体，转报明确提示
         if (settings.Data.Fingerprint.Count == 0)
         {
-            AppendLog("尚未配置载体指纹（settings.json Fingerprint 为空），无法切换");
+            AppendLog("尚未配置载体指纹，且未检测到客户端登录态载体，无法切换");
             return;
         }
 
@@ -323,6 +346,7 @@ public partial class SwitchViewModel : ViewModelBase
     [RelayCommand]
     private async Task CreateProfile()
     {
+        EnsureFingerprint();   // 建档前先确保指纹存在，否则只会备份出一个空壳 meta
         var settings = MainViewModel.SwitchSettings;
         var vault = MainViewModel.Vault;
         if (vault == null || settings == null) { AppendLog("建档失败：服务未初始化"); return; }

@@ -56,4 +56,49 @@ public static class CarrierDefaults
         }
         return null;
     }
+
+    /// <summary>
+    /// 自动检测「随账号切换而变化」的登录态载体（相对 DefaultUserDataDir 的路径），
+    /// 用于 settings.json Fingerprint 为空时回填。优先文档化的 globalStorage/storage.json，
+    /// 再补充实际的 leveldb 目录；未安装客户端或未检测到任何载体时返回空列表。
+    /// </summary>
+    public static List<string> DetectFingerprint()
+    {
+        var found = new List<string>();
+        var root = DefaultUserDataDir;
+        if (!Directory.Exists(root)) return found;
+        try
+        {
+            var storage = Path.Combine(root, "User", "globalStorage", "storage.json");
+            if (File.Exists(storage)) found.Add("User/globalStorage/storage.json");
+
+            // 登录态索引（LevelDB）目录：按相对路径记录，深度受限避免遍历过深/大目录
+            found.AddRange(ScanLevelDbDirs(root, depth: 0));
+        }
+        catch { /* 检测失败返回已找到部分 */ }
+        return found.Count > 12 ? found.Take(12).ToList() : found;
+    }
+
+    private static List<string> ScanLevelDbDirs(string root, int depth, List<string>? result = null, string current = "")
+    {
+        result ??= new List<string>();
+        if (depth > 5 || result.Count >= 12) return result;
+        var dir = current.Length == 0 ? root : Path.Combine(root, current);
+        foreach (var child in Directory.GetDirectories(dir))
+        {
+            var name = Path.GetFileName(child);
+            string rel = current.Length == 0 ? name : current + "/" + name;
+            if (name.Equals("leveldb", StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add(rel);
+                if (result.Count >= 12) break;
+            }
+            else if (!name.StartsWith("Cache", StringComparison.OrdinalIgnoreCase)
+                     && !name.Equals("Code Cache", StringComparison.OrdinalIgnoreCase))
+            {
+                ScanLevelDbDirs(root, depth + 1, result, rel);
+            }
+        }
+        return result;
+    }
 }

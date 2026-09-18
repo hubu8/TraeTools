@@ -95,7 +95,7 @@ public partial class SettingsViewModel : ViewModelBase
                     FeishuWebhook = cfg.FeishuWebhook;
                 AutoCheckinEnabled = cfg.AutoCheckinEnabled;
                 AutoCheckinTime = cfg.AutoCheckinTime;
-                CheckinIntervalSeconds = cfg.CheckinIntervalSeconds > 0 ? cfg.CheckinIntervalSeconds : 5;
+                CheckinIntervalSeconds = Math.Clamp(cfg.CheckinIntervalSeconds > 0 ? cfg.CheckinIntervalSeconds : 5, 1, 60);
                 MinimizeToTray = cfg.MinimizeToTray;
 
                 var acc = cfg.Accounts.FirstOrDefault(a => a.Id == cfg.ActiveAccountId)
@@ -287,7 +287,7 @@ public partial class SettingsViewModel : ViewModelBase
             {
                 cfg.AutoCheckinEnabled = AutoCheckinEnabled;
                 cfg.AutoCheckinTime = AutoCheckinTime;
-                cfg.CheckinIntervalSeconds = CheckinIntervalSeconds > 0 ? CheckinIntervalSeconds : 5;
+                cfg.CheckinIntervalSeconds = Math.Clamp(CheckinIntervalSeconds, 1, 60);
                 cfg.FeishuWebhook = FeishuWebhook;
                 cfg.MinimizeToTray = MinimizeToTray;
                 cfg.Save();

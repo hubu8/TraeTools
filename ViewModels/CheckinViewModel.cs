@@ -284,6 +284,7 @@ public partial class CheckinViewModel : ViewModelBase
             if (MainViewModel.CheckinApi == null) return false;
             _lastAutoCheckDate = DateTime.Today;  // 到点时置位，本日不再重复触发
 
+            RebuildCheckList();   // 勾选与账号保持同步（新增账号也能进入自动签到）
             var (any, results) = await CheckinAllAccountsAsync();
             if (any) { StatusMessage = "自动签到完成 ✓"; ReloadCalendar(); }
             if (results.Any(r => r.Ok)) await NotifyFeishuBatchAsync(results);   // 全失败不打扰
@@ -445,7 +446,8 @@ public partial class CheckinViewModel : ViewModelBase
         }
         catch (Exception ex) { AccountHelpers.CheckinLog(displayName, $"签到后 Status 查询异常：{ex.Message}"); }
 
-        if (gained <= 0) gained = acc.IsMember ? 200 : 150;
+        if (gained <= 0)
+            AccountHelpers.CheckinLog(displayName, "签到成功但本次积分解析为 0（如实记录，不虚构）");
 
         acc.LastCheckinDate = DateTime.Now;
         if (acc.Id == cfg.ActiveAccountId)
@@ -468,6 +470,36 @@ public partial class CheckinViewModel : ViewModelBase
     /// <summary>历史读写锁（唯一真源在 AccountHelpers，这里仅转发）。</summary>
     private static object HistoryIoLock => AccountHelpers.HistoryIoLock;
 
+    /// <summary>签到页账号勾选列表（与 TraeAccount.Enabled 双向同步，勾谁签谁）。</summary>
+    public ObservableCollection<AccountCheckItem> CheckAccounts { get; } = new();
+
+    /// <summary>按当前账号重建勾选列表：新增的补上、删除的移除、显示名刷新，勾选状态保留。</summary>
+    private void RebuildCheckList()
+    {
+        if (MainViewModel.AppConfig?.Accounts is not { } accounts) return;
+        var ids = accounts.Select(a => a.Id).ToHashSet();
+        foreach (var item in CheckAccounts.Where(i => !ids.Contains(i.Id)).ToList())
+            CheckAccounts.Remove(item);
+        foreach (var acc in accounts)
+        {
+            var display = string.IsNullOrEmpty(acc.Name) ? (acc.Id.Length > 6 ? acc.Id[..6] : acc.Id) : acc.Name!;
+            var existing = CheckAccounts.FirstOrDefault(i => i.Id == acc.Id);
+            if (existing == null)
+            {
+                var item = new AccountCheckItem { Id = acc.Id, Display = display, IsChecked = acc.Enabled };
+                item.OnChanged = c =>
+                {
+                    var a = MainViewModel.AppConfig?.Accounts.FirstOrDefault(x => x.Id == c.Id);
+                    if (a == null || a.Enabled == c.IsChecked) return;
+                    a.Enabled = c.IsChecked;
+                    try { MainViewModel.AppConfig?.Save(); } catch { /* 忽略 */ }
+                };
+                CheckAccounts.Add(item);
+            }
+            else existing.Display = display;
+        }
+    }
+
     /// <summary>自动签到上次已触发日期（每日仅触发一次）。</summary>
     private static DateTime _lastAutoCheckDate = DateTime.MinValue;
 
@@ -478,6 +510,7 @@ public partial class CheckinViewModel : ViewModelBase
     /// <summary>账号切换联动：按新激活账号刷新会员/奖励/日历/记录。</summary>
     public void Reload()
     {
+        RebuildCheckList();
         try
         {
             var cfg = MainViewModel.AppConfig;
@@ -530,6 +563,7 @@ public partial class CheckinViewModel : ViewModelBase
                 StatusMessage = "服务未初始化";
                 return;
             }
+            RebuildCheckList();   // 勾选与账号保持同步（含刚添加的账号）
             if (cfg.Accounts.Count == 0)
             {
                 StatusMessage = "没有可用账号，请先在「设置」中添加";

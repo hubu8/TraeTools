@@ -89,6 +89,22 @@ public class CheckinRecord
         : (Result == "—" ? new SolidColorBrush(Avalonia.Media.Color.FromRgb(0x94, 0xA3, 0xB8)) : new SolidColorBrush(Avalonia.Media.Color.FromRgb(0xEF, 0x44, 0x44)));
 }
 
+/// <summary>签到页账号勾选项：IsChecked 与 TraeAccount.Enabled 双向同步（勾谁签谁，手动/自动一致）。</summary>
+public sealed partial class AccountCheckItem : ObservableObject
+{
+    /// <summary>源账号 Id。</summary>
+    public required string Id { get; init; }
+    /// <summary>展示名（随账号改名同步刷新）。</summary>
+    public string Display { get; set; } = string.Empty;
+    [ObservableProperty]
+    private bool _isChecked;
+
+    /// <summary>勾选变化回调（由 VM 提供：同步 acc.Enabled 并保存）。</summary>
+    public Action<AccountCheckItem>? OnChanged;
+
+    partial void OnIsCheckedChanged(bool value) => OnChanged?.Invoke(this);
+}
+
 public class CalendarDay
 {
     public int Day { get; set; }
