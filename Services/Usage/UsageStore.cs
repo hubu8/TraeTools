@@ -4,7 +4,7 @@ using TraeTools.Models;
 namespace TraeTools.Services.Usage;
 
 /// <summary>
-/// 用量记录本地持久化：%APPDATA%\TraeCheckin\data\usage_&lt;accountId&gt;.jsonl，每条一行。
+/// 用量记录本地持久化：%APPDATA%\TraeTools\data\usage_&lt;accountId&gt;.jsonl，每条一行。
 /// 与签到历史文件同目录，按账号隔离。
 /// 每次抓取把新会话追加写入，读取时按 SessionId 去重（保留最新）、按时间倒序。
 /// </summary>
@@ -14,8 +14,7 @@ public static class UsageStore
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = false };
 
     private static string PathFor(string accountId) => System.IO.Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "TraeCheckin", "data", $"usage_{accountId}.jsonl");
+        TraeTools.Services.DataPaths.DataDir, $"usage_{accountId}.jsonl");
 
     /// <summary>读取某账号全部本地记录（按 UsageTime 倒序，SessionId 去重保留最新）。</summary>
     public static List<UsageSessionRecord> LoadAll(string accountId)

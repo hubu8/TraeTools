@@ -152,35 +152,15 @@ public static class AccountHelpers
     private static readonly object ProfileCacheLock = new();
     private static readonly Dictionary<string, ProfileCacheEntry> ProfileCache = new(StringComparer.Ordinal);
 
-    // ==================== 数据存储目录====================
+    // ==================== 数据存储目录（统一走 DataPaths）====================
 
     internal static readonly object HistoryIoLock = new();
 
-    /// <summary>根目录：%APPDATA%\TraeCheckin</summary>
-    internal static string BaseDir => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TraeCheckin");
+    /// <summary>数据目录（数据库、签到历史、用量等），统一走 DataPaths.DataDir。</summary>
+    internal static string DataDir => TraeTools.Services.DataPaths.DataDir;
 
-    /// <summary>数据目录：%APPDATA%\TraeCheckin\data（数据库、历史记录、用量等）</summary>
-    internal static string DataDir
-    {
-        get
-        {
-            var dir = Path.Combine(BaseDir, "data");
-            Directory.CreateDirectory(dir);
-            return dir;
-        }
-    }
-
-    /// <summary>日志目录：%APPDATA%\TraeCheckin\logs（各模块调试日志）</summary>
-    internal static string LogsDir
-    {
-        get
-        {
-            var dir = Path.Combine(BaseDir, "logs");
-            Directory.CreateDirectory(dir);
-            return dir;
-        }
-    }
+    /// <summary>日志目录（各模块调试日志），统一走 DataPaths.LogsDir。</summary>
+    internal static string LogsDir => TraeTools.Services.DataPaths.LogsDir;
 
     /// <summary>兼容旧名，指向 DataDir。</summary>
     internal static string HistoryDir => DataDir;

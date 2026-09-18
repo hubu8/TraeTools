@@ -9,7 +9,7 @@ namespace TraeCheckin;
 /// <summary>
 /// 签到数据 SQLite 存储。替代原 history_*.txt / credits_total_*.txt 文本文件，
 /// 支持按日期、账号、积分三维度查询与聚合。
-/// 数据库文件：%APPDATA%\TraeCheckin\checkin.db
+/// 数据库文件：%APPDATA%\TraeTools\data\checkin.db
 /// </summary>
 public class CheckinDatabase : IDisposable
 {
@@ -33,11 +33,7 @@ public class CheckinDatabase : IDisposable
 
     public CheckinDatabase()
     {
-        var dataDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "TraeCheckin", "data");
-        Directory.CreateDirectory(dataDir);
-        var dbPath = Path.Combine(dataDir, "checkin.db");
+        var dbPath = Path.Combine(TraeTools.Services.DataPaths.DataDir, "checkin.db");
 
         _conn = new SqliteConnection($"Data Source={dbPath}");
         _conn.Open();

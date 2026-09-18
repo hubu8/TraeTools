@@ -98,13 +98,15 @@ public partial class MainViewModel : ViewModelBase
         try
         {
             CheckinDb = new CheckinDatabase();
-            // 首次启动时从旧版文本文件迁移数据（兼容旧目录和新目录）
-            var baseDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TraeCheckin");
-            var dataDir = Path.Combine(baseDir, "data");
-            // 旧文件可能在 baseDir（旧版）或 dataDir（新版），两边都扫
+            // 首次启动时从旧版文本文件迁移数据到数据库
+            // DataPaths.Migrate() 已在 Program.cs 中先行调用，文件已搬入新目录
+            // 这里扫描新目录（DataDir）即可；同时兼容扫描旧目录以防迁移未执行
             int migrated = 0;
-            foreach (var dir in new[] { baseDir, dataDir })
+            var newDataDir = TraeTools.Services.DataPaths.DataDir;
+            var oldBaseDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TraeCheckin");
+            var oldDataDir = Path.Combine(oldBaseDir, "data");
+            foreach (var dir in new[] { newDataDir, oldBaseDir, oldDataDir })
             {
                 if (Directory.Exists(dir))
                     migrated += CheckinDb.MigrateFromHistoryFiles(dir)

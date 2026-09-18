@@ -15,7 +15,7 @@ namespace TraeTools.ViewModels;
 public partial class CheckinViewModel : ViewModelBase
 {
     [ObservableProperty]
-    private string _todayReward = "+150";
+    private string _todayReward = "--";
 
     [ObservableProperty]
     private int _streakDays = 0;
@@ -33,7 +33,7 @@ public partial class CheckinViewModel : ViewModelBase
     private double _progressRatio = 0;
 
     [ObservableProperty]
-    private string _progressText = "0/30";
+    private string _progressText = $"0/{DateTime.DaysInMonth(DateTime.Today.Year, DateTime.Today.Month)}";
 
     [ObservableProperty]
     private string _statusMessage = "";
@@ -65,7 +65,6 @@ public partial class CheckinViewModel : ViewModelBase
                     IsMember = acc.IsMember;
                     MemberHint = acc.IsMember ? "会员：基础 150 + 连签 50" : "非会员：基础签到 150 积分";
                     MemberMultiplier = acc.IsMember ? "×1.33" : "×1.0";
-                    TodayReward = acc.IsMember ? "+200" : "+150";
                 }
             }
         }
@@ -512,7 +511,6 @@ public partial class CheckinViewModel : ViewModelBase
                 IsMember = acc.IsMember;
                 MemberHint = acc.IsMember ? "会员：基础 150 + 连签 50" : "非会员：基础签到 150 积分";
                 MemberMultiplier = acc.IsMember ? "×1.33" : "×1.0";
-                TodayReward = acc.IsMember ? "+200" : "+150";
                 StatusMessage = acc.LastCheckinDate.HasValue && acc.LastCheckinDate.Value.Date == DateTime.Today
                     ? "今日已签到"
                     : "";
