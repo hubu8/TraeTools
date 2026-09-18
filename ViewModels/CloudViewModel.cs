@@ -75,7 +75,11 @@ public partial class CloudViewModel : ViewModelBase
         _ = RefreshDeploymentStateAsync();
     }
 
-    private void AppendLog(string line) => DeployLog += $"\n[{DateTime.Now:HH:mm:ss}] {line}";
+    private void AppendLog(string line)
+    {
+        DeployLog += $"\n[{DateTime.Now:HH:mm:ss}] {line}";
+        AccountHelpers.AppLog("cloud", "", line);
+    }
 
     /// <summary>从本地配置读取授权信息并刷新按钮/状态文案。</summary>
     private void RefreshCloudState(bool isDeployFlow)
@@ -113,7 +117,7 @@ public partial class CloudViewModel : ViewModelBase
 
             DeploymentStatus status;
             try { status = await _ghApi.GetDeploymentStatusAsync(token, login); }
-            catch { return; }
+            catch (Exception ex) { AccountHelpers.AppLog("cloud", "", $"检测部署状态异常：{ex.Message}"); return; }
 
             if (!status.IsAuthorized) { ClearCloudAuth("GitHub 授权已失效，请重新授权"); return; }
 

@@ -158,7 +158,11 @@ public partial class SwitchViewModel : ViewModelBase
         LogText = $"[{DateTime.Now:HH:mm:ss}] {reason}\n请先在 TraeSwitch 或本页「建档」中备份账号登录态";
     }
 
-    private void AppendLog(string line) => LogText += $"\n[{DateTime.Now:HH:mm:ss}] {line}";
+    private void AppendLog(string line)
+    {
+        LogText += $"\n[{DateTime.Now:HH:mm:ss}] {line}";
+        AccountHelpers.AppLog("switch", "", line);
+    }
 
     private void ResetSteps()
     {
@@ -267,13 +271,18 @@ public partial class SwitchViewModel : ViewModelBase
         {
             var cfg = MainViewModel.AppConfig;
             var acc = cfg?.Accounts.FirstOrDefault(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
-            if (cfg == null || acc == null) return;
+            if (cfg == null || acc == null)
+            {
+                AppendLog($"同步激活账号失败：未在本地配置中找到「{name}」");
+                return;
+            }
             if (cfg.ActiveAccountId == acc.Id) { LoadAccounts(); return; }
             cfg.ActiveAccountId = acc.Id;
             try { cfg.Save(); } catch { /* 保存失败不阻断切换 */ }
+            AppendLog($"已同步激活账号为「{name}」");
             MainViewModel.NotifyActiveAccountChanged();
         }
-        catch { /* 同步失败不影响切换结果 */ }
+        catch (Exception ex) { AppendLog($"同步激活账号异常：{ex.Message}"); }
     }
 
     [RelayCommand]

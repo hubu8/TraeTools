@@ -28,12 +28,14 @@ public static class AccountHelpers
     {
         var cfg = MainViewModel.AppConfig;
         var api = MainViewModel.CheckinApi;
+        var name = string.IsNullOrEmpty(acc.Name) ? (acc.Id.Length > 6 ? acc.Id[..6] : acc.Id) : acc.Name!;
         if (cfg == null || api == null) return false;
 
         if (!string.IsNullOrEmpty(acc.Token))
         {
             var st = await api.GetStatusAsync(acc.Token, acc.DeviceId);
             if (st != null && st.code == 0) return true;
+            CheckinLog(name, $"Token 已失效（status code={st?.code ?? -1}），尝试 Session 换新");
         }
 
         // token 失效：用会话 Cookie 静默换新（无需重新登录）
@@ -46,8 +48,14 @@ public static class AccountHelpers
                 acc.AccountUid = TokenUtils.ParseAccountUid(renewed);
                 acc.TokenUpdatedAt = DateTime.Now;
                 try { cfg.Save(); } catch { /* 忽略 */ }
+                CheckinLog(name, $"Session 换新 Token 成功，新 AccountUid={acc.AccountUid}");
                 return true;
             }
+            CheckinLog(name, "Session 换新 Token 失败（返回为空）");
+        }
+        else
+        {
+            CheckinLog(name, "Token 失效且无 Session，无法自动换新");
         }
         return false;
     }
@@ -61,6 +69,7 @@ public static class AccountHelpers
     {
         var cfg = MainViewModel.AppConfig;
         var api = MainViewModel.CheckinApi;
+        var name = string.IsNullOrEmpty(acc.Name) ? (acc.Id.Length > 6 ? acc.Id[..6] : acc.Id) : acc.Name!;
         if (cfg == null || api == null || string.IsNullOrEmpty(acc.Token)) return false;
 
         // 当日已有缓存：直接回填，不再打接口
@@ -79,7 +88,11 @@ public static class AccountHelpers
         }
 
         bool valid = await EnsureValidTokenAsync(acc);   // 先保证 token 可用
-        if (!valid) return false;
+        if (!valid)
+        {
+            CheckinLog(name, "拉取账号资料失败：Token 无效且换新失败");
+            return false;
+        }
         var token = acc.Token ?? "";
 
         try
@@ -95,6 +108,11 @@ public static class AccountHelpers
                 // 未手动备注时用平台昵称充当展示名（Name 非空则保留用户备注）
                 if (string.IsNullOrWhiteSpace(acc.Name) && !string.IsNullOrEmpty(profile.ScreenName))
                     acc.Name = profile.ScreenName;
+                CheckinLog(name, $"资料拉取成功：昵称={profile.ScreenName}，手机={profile.MobileMasked}");
+            }
+            else
+            {
+                CheckinLog(name, "资料拉取返回 null");
             }
             int student = await api.GetStudentStatusAsync(token, acc.Session);
             acc.IsStudent = student == 1;
@@ -113,8 +131,9 @@ public static class AccountHelpers
             }
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            CheckinLog(name, $"资料拉取异常：{ex.Message}");
             return false;
         }
     }
@@ -133,14 +152,38 @@ public static class AccountHelpers
     private static readonly object ProfileCacheLock = new();
     private static readonly Dictionary<string, ProfileCacheEntry> ProfileCache = new(StringComparer.Ordinal);
 
-    // ==================== 签到历史统一落盘 ====================
+    // ==================== 数据存储目录 ====================
 
-    /// <summary>历史文件目录的唯一真源（签到页/各入口共用）。</summary>
     internal static readonly object HistoryIoLock = new();
 
-    /// <summary>历史文件目录的唯一真源（%APPDATA%\TraeCheckin）。</summary>
-    internal static string HistoryDir => Path.Combine(
+    /// <summary>根目录：%APPDATA%\TraeCheckin</summary>
+    internal static string BaseDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TraeCheckin");
+
+    /// <summary>数据目录：%APPDATA%\TraeCheckin\data（数据库、历史记录、用量等）</summary>
+    internal static string DataDir
+    {
+        get
+        {
+            var dir = Path.Combine(BaseDir, "data");
+            Directory.CreateDirectory(dir);
+            return dir;
+        }
+    }
+
+    /// <summary>日志目录：%APPDATA%\TraeCheckin\logs（各模块调试日志）</summary>
+    internal static string LogsDir
+    {
+        get
+        {
+            var dir = Path.Combine(BaseDir, "logs");
+            Directory.CreateDirectory(dir);
+            return dir;
+        }
+    }
+
+    /// <summary>兼容旧名，指向 DataDir。</summary>
+    internal static string HistoryDir => DataDir;
 
     private static bool _legacyHistoryCleaned;
 
@@ -171,51 +214,57 @@ public static class AccountHelpers
     }
 
     /// <summary>
-    /// 追加一条签到历史（与签到页共用同一管道格式：date | name | type | 结果）。
-    /// 供仪表盘「立即签到」、托盘「立即签到」等所有签到入口共用，避免部分入口不记历史。
-    /// 失败时也写入记录（success=false + reason），让用户能从记录列表看到失败原因。
+    /// 记录一次签到成功（同时写入 SQLite 数据库与旧版 history 文本文件保持兼容）。
     /// </summary>
-    public static void AppendHistory(TraeCheckin.TraeAccount acc, double gained, bool success = true, string? reason = null)
+    public static void AppendHistory(TraeCheckin.TraeAccount acc, double gained)
     {
+        var name = string.IsNullOrEmpty(acc.Name) ? (acc.Id.Length > 6 ? acc.Id[..6] : acc.Id) : acc.Name;
+
+        // 写入 SQLite
+        try
+        {
+            MainViewModel.CheckinDb?.InsertCheckin(DateTime.Now, acc.Id, name, gained, acc.IsMember);
+        }
+        catch { /* 数据库写入失败不影响签到 */ }
+
+        // 同时写入旧版文本文件（保持兼容，后续版本可移除）
         try
         {
             lock (HistoryIoLock)
             {
                 Directory.CreateDirectory(HistoryDir);
                 var historyFile = Path.Combine(HistoryDir, $"history_{DateTime.Now:yyyyMM}.txt");
-                var name = string.IsNullOrEmpty(acc.Name) ? (acc.Id.Length > 6 ? acc.Id[..6] : acc.Id) : acc.Name;
-                string line;
-                if (success)
-                    line = $"{DateTime.Now:yyyy-MM-dd HH:mm} | {name} | 每日签到 | +{(int)gained}";
-                else
-                    line = $"{DateTime.Now:yyyy-MM-dd HH:mm} | {name} | 签到失败 | {(string.IsNullOrEmpty(reason) ? "未知原因" : reason)}";
+                var line = $"{DateTime.Now:yyyy-MM-dd HH:mm} | {name} | 每日签到 | +{(int)gained}";
                 File.AppendAllText(historyFile, line + Environment.NewLine);
             }
         }
         catch { /* 历史写入失败不影响签到 */ }
     }
 
-    // ==================== 签到调试日志（排查问题用） ====================
+    // ==================== 通用分类日志（排查问题用） ====================
 
     /// <summary>日志文件锁（独立于 HistoryIoLock，避免签到高峰争用）。</summary>
-    private static readonly object CheckinLogLock = new();
+    private static readonly object LogLock = new();
 
     /// <summary>
-    /// 写入一条签到调试日志到 checkin_log_yyyyMM.txt。
-    /// 记录时间、账号、设备号、API 结果等关键信息，便于排查 9074 / token 失效等问题。
+    /// 写入一条分类调试日志到 {category}_log_yyyyMM.txt。
+    /// 各模块按 category 归档：checkin / account / cloud / switch / usage。
     /// </summary>
-    public static void CheckinLog(string accountName, string message)
+    public static void AppLog(string category, string accountName, string message)
     {
         try
         {
-            lock (CheckinLogLock)
+            lock (LogLock)
             {
-                Directory.CreateDirectory(HistoryDir);
-                var logFile = Path.Combine(HistoryDir, $"checkin_log_{DateTime.Now:yyyyMM}.txt");
+                var logFile = Path.Combine(LogsDir, $"{category}_log_{DateTime.Now:yyyyMM}.txt");
                 var name = string.IsNullOrEmpty(accountName) ? "?" : accountName;
                 File.AppendAllText(logFile, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{name}] {message}{Environment.NewLine}");
             }
         }
-        catch { /* 日志写入失败不影响签到 */ }
+        catch { /* 日志写入失败不影响业务 */ }
     }
+
+    /// <summary>签到日志快捷方法（兼容已有调用）。</summary>
+    public static void CheckinLog(string accountName, string message)
+        => AppLog("checkin", accountName, message);
 }

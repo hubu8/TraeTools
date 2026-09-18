@@ -291,6 +291,7 @@ public partial class SettingsViewModel : ViewModelBase
                 cfg.FeishuWebhook = FeishuWebhook;
                 cfg.MinimizeToTray = MinimizeToTray;
                 cfg.Save();
+                AccountHelpers.AppLog("account", "", $"设置已保存：自动签到={AutoCheckinEnabled}，时间={AutoCheckinTime}，间隔={cfg.CheckinIntervalSeconds}秒，托盘={MinimizeToTray}");
             }
 
             PushStatus = "已保存 ✓";
@@ -385,6 +386,7 @@ public partial class SettingsViewModel : ViewModelBase
                     {
                         cfg.Accounts.Remove(acc);
                         cfg.Save();
+                        AccountHelpers.CheckinLog(acc.Id[..6], $"添加账号取消：同一手机号已存在（{dup.Name}）");
                         PushStatus = "该账号已存在（" + dup.Name + "），取消重复添加";
                         PopulateAccounts();
                         return;
@@ -396,6 +398,8 @@ public partial class SettingsViewModel : ViewModelBase
                 if (string.IsNullOrWhiteSpace(acc.DeviceId))
                     acc.DeviceId = Random.Shared.NextInt64(1_000_000_000_000_000L, 10_000_000_000_000_000L).ToString();
                 cfg.Save();
+                var accName = string.IsNullOrEmpty(acc.Name) ? acc.Id[..6] : acc.Name!;
+                AccountHelpers.CheckinLog(accName, $"添加账号成功，DeviceId={acc.DeviceId}，Token 长度={acc.Token?.Length ?? 0}");
                 // 立即拉取账号资料（昵称/手机尾号/学生认证），让列表马上展示出真名（force：跳过当日缓存）
                 await AccountHelpers.RefreshProfileAsync(acc, force: true);
                 PushStatus = "账号登录成功 ✓，Token 已保存";
@@ -410,6 +414,7 @@ public partial class SettingsViewModel : ViewModelBase
                 else
                     cfg.ActiveAccountId = prevActiveId;
                 cfg.Save();
+                AccountHelpers.CheckinLog("?", "添加账号已取消");
                 PushStatus = "已取消添加账号";
             }
         }
@@ -437,6 +442,7 @@ public partial class SettingsViewModel : ViewModelBase
                 PushStatus = "删除失败：账号不存在";
                 return;
             }
+            AccountHelpers.CheckinLog(SelectedAccount.Name ?? SelectedAccount.Id[..6], "账号已删除");
             cfg.Save();
             PushStatus = "账号已删除";
             PopulateAccounts();
