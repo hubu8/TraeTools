@@ -19,3 +19,5 @@ Thumbs.db
 
 # Publish output
 publish/
+
+build_temp/
